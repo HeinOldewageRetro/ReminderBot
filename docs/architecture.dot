@@ -1,0 +1,9 @@
+digraph {
+    "Channel Filter1" -> "Slack Channel1";
+	"Channel Filter2" -> "Slack Channel2";
+	"Message Broadcaster" -> "Channel Filter1";
+	"Message Broadcaster" -> "Channel Filter2";
+	"General Filter" -> "Message Broadcaster";
+	"Event Source 1" -> "General Filter";
+	"Event Source 2" -> "General Filter";
+}
