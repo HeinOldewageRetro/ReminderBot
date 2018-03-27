@@ -1,3 +1,7 @@
 *.png
 *.exe
+*.txt
 client_secret.json
+*.db
+*.db.lock
+cmd/ReminderBot/ReminderBot

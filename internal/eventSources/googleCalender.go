@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"bitbucket.org/Neoin/ReminderBot/internal/interfaces"
+	"github.com/boltdb/bolt"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -107,41 +108,65 @@ func (gc *GoogleCalender) Start() {
 	}
 	client := getClient(ctx, config)
 
-	srv, err := calendar.New(client)
+	db, err := bolt.Open("googleCalender.db", os.ModePerm, nil)
 	if err != nil {
-		log.Fatalf("Unable to retrieve calendar Client %v", err)
+		fmt.Println(err)
 	}
+	defer db.Close()
 
-	t := time.Now().Add(time.Hour * 24 * 30).Format(time.RFC3339)
-	events, err := srv.Events.List("primary").ShowDeleted(false).
-		SingleEvents(true).TimeMin(t).MaxResults(10).OrderBy("startTime").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve next ten of the user's events. %v", err)
-	}
+	for {
+		srv, err := calendar.New(client)
+		if err != nil {
+			log.Fatalf("Unable to retrieve calendar Client %v", err)
+		}
 
-	fmt.Println("Upcoming events:")
-	if len(events.Items) > 0 {
-		for _, i := range events.Items {
-			var when string
-			// If the DateTime is an empty string the Event is an all-day Event.
-			// So only Date is available.
-			if i.Start.DateTime != "" {
-				when = i.Start.DateTime
-			} else {
-				when = i.Start.Date
-			}
-			fmt.Printf("%s (%s) %+v \n", i.Summary, when, i)
+		t := time.Now().Add(time.Hour * 24 * 30).Format(time.RFC3339)
+		events, err := srv.Events.List("primary").ShowDeleted(false).
+			SingleEvents(true).TimeMin(t).MaxResults(10).OrderBy("startTime").Do()
+		if err != nil {
+			log.Fatalf("Unable to retrieve next ten of the user's events. %v", err)
+		}
 
-			if gc.handler != nil {
+		if len(events.Items) > 0 {
+			for _, i := range events.Items {
+
+				if gc.handler == nil {
+					continue
+				}
+
+				hasKey := false
+				err := db.Batch(func(tx *bolt.Tx) error {
+					bucket, err := tx.CreateBucketIfNotExists([]byte("meetup"))
+					if err != nil {
+						return err
+					}
+					key := bucket.Get([]byte(i.Id))
+					if key != nil {
+						hasKey = true
+					} else {
+						bucket.Put([]byte(i.Id), make([]byte, 0))
+					}
+					return nil
+				})
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				if hasKey {
+					continue
+				}
+
 				gc.handler(&googleEvent{
-					
+
 					targets: make([]string, 0),
 					event:   i,
 				})
+
 			}
+		} else {
+			fmt.Printf("No upcoming events found.\n")
 		}
-	} else {
-		fmt.Printf("No upcoming events found.\n")
+		time.Sleep(time.Minute)
 	}
 }
 
@@ -155,7 +180,9 @@ type googleEvent struct {
 }
 
 func (gc *googleEvent) String() string {
-	return "*"+ gc.event.Summary+"*" + "\n" gc.event.Description
+	return "*" + gc.event.Summary + "*" + "\n" +
+		gc.event.Description + "\n" +
+		gc.event.Location
 }
 
 func (gc *googleEvent) Target() []string {

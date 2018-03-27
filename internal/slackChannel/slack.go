@@ -11,9 +11,8 @@ import (
 )
 
 type Slack struct {
+	SlackWebHook string
 }
-
-const url = ""
 
 func (s *Slack) Send(m interfaces.Message) error {
 	buf := &bytes.Buffer{}
@@ -24,7 +23,7 @@ func (s *Slack) Send(m interfaces.Message) error {
 			Text: m.String(),
 		},
 	)
-	resp, err := http.Post(url, "application/json", buf)
+	resp, err := http.Post(s.SlackWebHook, "application/json", buf)
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
